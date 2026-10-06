@@ -3,75 +3,96 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 DATA_DIR = Path(".")
+OUTPUT_DIR = DATA_DIR / "results" / "visualizations"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 df = pd.read_csv(DATA_DIR / "ir_train.csv")
 df["departure_date"] = pd.to_datetime(df["departure_date"], errors="coerce")
 
 if "is_overloaded" in df.columns and df["is_overloaded"].nunique() <= 1:
     df = df.drop(columns=["is_overloaded"])
 
-print("Cleaned shape:", df.shape)
-
-delay = df["is_delayed"].value_counts().rename(index={0:"On Time", 1:"Delayed"}).to_frame("Count")
+# Overall delay distribution
+delay = (
+    df["is_delayed"]
+    .value_counts()
+    .reindex([0, 1], fill_value=0)
+    .rename(index={0: "On Time", 1: "Delayed"})
+    .to_frame("Count")
+)
 delay["Percentage"] = (delay["Count"] / delay["Count"].sum() * 100).round(2)
-print("\nOverall delay distribution:\n", delay)
 
-train_type = df.groupby("train_type")["is_delayed"].agg(["count","mean"])
-train_type["delay_percentage"] = (train_type["mean"] * 100).round(2)
-print("\nDelay by train type:\n", train_type.sort_values("mean", ascending=False))
+plt.figure(figsize=(9, 6))
+plt.bar(delay.index, delay["Count"])
+plt.title("Overall Train Delay Distribution")
+plt.ylabel("Number of journeys")
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "01_overall_delay_distribution.png", dpi=200, bbox_inches="tight")
+plt.close()
 
-zone = df.groupby("zone_abbr")["is_delayed"].agg(["count","mean"])
-zone["delay_percentage"] = (zone["mean"] * 100).round(2)
-print("\nDelay by zone:\n", zone.sort_values("mean", ascending=False))
+# Delay by train type
+train_type = df.groupby("train_type")["is_delayed"].mean().mul(100).sort_values(ascending=False)
+plt.figure(figsize=(12, 7))
+plt.barh(train_type.index[::-1], train_type.values[::-1])
+plt.title("Delay Rate by Train Type")
+plt.xlabel("Delayed journeys (%)")
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "06_delay_rate_by_train_type.png", dpi=200, bbox_inches="tight")
+plt.close()
 
-season = df.groupby("season")["is_delayed"].agg(["count","mean"])
-season["delay_percentage"] = (season["mean"] * 100).round(2)
-print("\nDelay by season:\n", season.sort_values("mean", ascending=False))
+# Delay by railway zone
+zone = df.groupby("zone_abbr")["is_delayed"].mean().mul(100).sort_values(ascending=False)
+plt.figure(figsize=(11, 7))
+plt.barh(zone.index[::-1], zone.values[::-1])
+plt.title("Delay Rate by Railway Zone")
+plt.xlabel("Delayed journeys (%)")
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "07_delay_rate_by_zone.png", dpi=200, bbox_inches="tight")
+plt.close()
 
+# Delay by season
+season = df.groupby("season")["is_delayed"].mean().mul(100).sort_values(ascending=False)
+plt.figure(figsize=(10, 6))
+plt.bar(season.index, season.values)
+plt.title("Delay Rate by Season")
+plt.ylabel("Delayed journeys (%)")
+plt.xticks(rotation=25, ha="right")
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "02_delay_rate_by_season_from_raw_data.png", dpi=200, bbox_inches="tight")
+plt.close()
+
+# Delay by departure hour
 hour = df.groupby("departure_hour")["is_delayed"].mean().mul(100)
-print("\nDelay by departure hour:\n", hour.round(2))
-
-print("\nPrimary delay causes:\n", df["primary_delay_cause"].value_counts())
-print("\nDelay duration:\n", df["delay_minutes"].describe())
-
-figures = [
-    ("Train Delay Status Distribution", ["On Time", "Delayed"], delay["Count"].values, "bar"),
-    ("Delay Rate by Train Type", train_type.sort_values("delay_percentage").index, train_type.sort_values("delay_percentage")["delay_percentage"].values, "barh"),
-    ("Delay Rate by Railway Zone", zone.index, zone["delay_percentage"].values, "bar"),
-    ("Delay Rate by Season", season.sort_values("delay_percentage").index, season.sort_values("delay_percentage")["delay_percentage"].values, "bar"),
-]
-
-for title, x, y, kind in figures:
-    plt.figure(figsize=(11, 6))
-    if kind == "barh":
-        plt.barh(x, y)
-    else:
-        plt.bar(x, y)
-    plt.title(title)
-    plt.ylabel("Delayed Journeys (%)" if "Status" not in title else "Number of Journeys")
-    plt.xticks(rotation=45 if kind == "bar" else 0)
-    plt.tight_layout()
-    plt.show()
-
-plt.figure(figsize=(12, 5))
+plt.figure(figsize=(12, 6))
 plt.plot(hour.index, hour.values, marker="o")
 plt.title("Train Delay Rate by Departure Hour")
-plt.xlabel("Departure Hour")
-plt.ylabel("Delay Rate (%)")
+plt.xlabel("Departure hour")
+plt.ylabel("Delay rate (%)")
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+plt.savefig(OUTPUT_DIR / "08_delay_rate_by_departure_hour.png", dpi=200, bbox_inches="tight")
+plt.close()
 
-plt.figure(figsize=(11, 7))
-df["primary_delay_cause"].value_counts().sort_values().plot(kind="barh")
+# Primary delay causes
+causes = df["primary_delay_cause"].value_counts().sort_values()
+plt.figure(figsize=(12, 8))
+plt.barh(causes.index, causes.values)
 plt.title("Distribution of Primary Delay Causes")
-plt.xlabel("Number of Journeys")
+plt.xlabel("Number of journeys")
 plt.tight_layout()
-plt.show()
+plt.savefig(OUTPUT_DIR / "09_primary_delay_causes.png", dpi=200, bbox_inches="tight")
+plt.close()
 
+# Delay-duration distribution
 plt.figure(figsize=(10, 6))
 plt.hist(df["delay_minutes"], bins=50)
 plt.title("Distribution of Train Delay Duration")
 plt.xlabel("Delay (minutes)")
-plt.ylabel("Number of Journeys")
+plt.ylabel("Number of journeys")
 plt.tight_layout()
-plt.show()
+plt.savefig(OUTPUT_DIR / "10_delay_duration_distribution.png", dpi=200, bbox_inches="tight")
+plt.close()
+
+print("EDA visualizations saved to:", OUTPUT_DIR)
+for path in sorted(OUTPUT_DIR.glob("*.png")):
+    print(path)
